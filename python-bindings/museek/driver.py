@@ -19,6 +19,7 @@
 import socket
 import struct
 import random
+import logging
 
 try:
 	from Crypto.Hash import SHA256
@@ -48,7 +49,7 @@ class UnknownMessageException(Exception):
 	pass
 
 # Extract message codes and classes from messages.py and add them to MSGTAB
-import messages
+import museek.messages as messages
 MSGTAB = {}
 for _message in dir(messages):
 	message = getattr(messages, _message)
@@ -76,26 +77,26 @@ class Driver:
 			self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 			try:
 				self.socket.connect(host)
-			except Exception, e:
+			except Exception as e:
 				self.socket = None
 				raise e
 		else:
 			# Connect to a TCP socket
 			ix = host.rfind(":")
 			if(ix == -1):
-				raise InvalidHostException, 'hostname "%s" is missing a port' % host
+				raise InvalidHostException('hostname "%s" is missing a port' % host)
 			addr = (host[:ix], int(host[ix+1:]))
 			self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 			try:
 				self.socket.connect(addr)
-			except Exception, e:
+			except Exception as e:
 				self.socket = None
 				raise e
 	
 	# Fetch and parse a message from museekd, blocks until an entire message is read
 	def fetch(self):
 		## Unpack the first 8 bytes of the message
-		data = ""
+		data = b''
 		while len(data) < 8:
 			buf = self.socket.recv(8 - len(data))
 			if not buf:
@@ -108,12 +109,12 @@ class Driver:
 		length = struct.unpack("<i", data[:4])[0]
 		
 		if length < 4:
-			raise InvalidMessageException, 'received invalid message length (%i)' % length
+			raise InvalidMessageException('received invalid message length (%i)' % length)
 		## Second 4 bytes are the message code
 		code = struct.unpack("<I", data[4:])[0]
 		## If message is longer than it's code, unpack all data
 
-		data = ''
+		data = b''
 		if length > 4:
 			length -= 4
 			while len(data) < length:
@@ -127,14 +128,15 @@ class Driver:
 	
 		## If message doesn't match known messages, raise an error
 		if not code in MSGTAB:
-			raise UnknownMessageException, 'received unknown message tyoe 0x%04X' % code
+			raise UnknownMessageException('received unknown message tyoe 0x%04X' % code)
 		## Parse message with the message's class parse function
 		m = MSGTAB[code]()
 		m.cipher = self.cipher
 		try:
 			newmessage = m.parse(data)
-		except Exception, e:
+		except Exception as e:
 			self.PassError(e)
+			logging.exception(e)
 			return None
 		else:
 			return newmessage
@@ -284,7 +286,7 @@ class Driver:
 		elif message.__class__ is messages.RemoveHatedInterest:
 			self.cb_remove_hated_interest(message.interest)
 		else:
-			print 'Unhandled message:', message
+			print('Unhandled message:', message)
 	
 	
 	# Sync with museekd
@@ -296,8 +298,8 @@ class Driver:
 		while 1:
 			try:
 				message = self.fetch()
-			except Exception, e:
-				print e
+			except Exception as e:
+				print(e)
 				continue
 			if message.__class__ == messages.Ping and message.id == id:
 				break

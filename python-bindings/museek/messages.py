@@ -18,6 +18,7 @@
 
 import struct
 import sys
+import logging
 # Event mask
 EM_CHAT		= 1 << 0
 EM_PRIVATE	= 1 << 1
@@ -53,12 +54,12 @@ class BaseMessage:
 		pass
 	
 	def make(self):
-		print "make called on unsupported message type"
+		print("make called on unsupported message type")
 		sys.stdout.flush()
 		return ""
 
 	def parse(self, msg):
-		print "parse called on unsupported message type"
+		print("parse called on unsupported message type")
 		sys.stdout.flush()
 		return None
 
@@ -72,7 +73,13 @@ class BaseMessage:
 		return struct.pack("<Q", i)
 
 	def pack_string(self, s):
-		return self.pack_int(len(s)) + s
+		try:
+			return self.pack_int(len(s)) + bytes(s, 'utf-8')
+		except Exception as e:
+			logging.debug("Error with type: {} {}".format(type(s), s))
+			logging.exception(e)
+			raise e
+
 
 	def unpack_int(self, d):
 		return struct.unpack("<i", d[:4])[0], d[4:]
@@ -99,9 +106,9 @@ class BaseMessage:
 		return string, position+lenstring
 	
 	def unpack_cipher(self, d):
-		l, d = self.unpack_uint(d);
+		l, d = self.unpack_uint(d)
 		if(l % 16) != 0:
-			l_c = ((l / 16) + 1) * 16
+			l_c = ((l // 16) + 1) * 16
 		else:
 			l_c = l
 		return self.cipher.decipher(d[0:l_c])[:l], d[l_c:]
@@ -164,7 +171,7 @@ class Login(BaseMessage):
 			self.pack_uint(self.mask)
 	
 	def parse(self, data):
-		self.result, data = ord(data[0]), data[1:]
+		self.result, data = data[0], data[1:]
 		self.msg, data = self.unpack_string(data)
 		self.challenge, data = self.unpack_string(data)
 		return self
@@ -177,7 +184,7 @@ class ServerState(BaseMessage):
 		self.username = None
 
 	def parse(self, data):
-		self.state, data = ord(data[0]), data[1:]
+		self.state, data = data[0], data[1:]
 		self.username, data = self.unpack_string(data)
 		return self
 
@@ -216,7 +223,7 @@ class StatusMessage(BaseMessage):
 		self.message = None
 
 	def parse(self, data):
-		self.type, data = ord(data[0]), data[1:]
+		self.type, data = data[0], data[1:]
 		self.message, data = self.unpack_string(data)
 		return self
 
@@ -326,7 +333,7 @@ class PeerExists(BaseMessage):
 	
 	def parse(self, data):
 		self.user, data = self.unpack_string(data)
-		self.exists = ord(data[0])
+		self.exists = data[0]
 		return self
 	
 class PeerStatus(BaseMessage):
@@ -367,7 +374,7 @@ class PeerStats(BaseMessage):
 		self.numdownloads, data = self.unpack_uint(data)
 		self.numfiles, data = self.unpack_uint(data)
 		self.numdirs, data = self.unpack_uint(data)
-		self.slotsfull, data = ord(data[0]), data[1:]
+		self.slotsfull, data = data[0], data[1:]
 		self.country, data = self.unpack_string(data)
 		return self
 
@@ -392,7 +399,7 @@ class UserInfo(BaseMessage):
 		self.picture, data = self.unpack_string(data)
 		self.uploads, data = self.unpack_uint(data)
 		self.queue, data = self.unpack_uint(data)
-		self.slotsfree, data = ord(data[0]), data[1:]
+		self.slotsfree, data = data[0], data[1:]
 		return self
 
 class UserShares(BaseMessage):
@@ -497,7 +504,7 @@ class RoomState(BaseMessage): # deprecated since 0.3
 				files, pos = self.unpack_pos_uint(data, pos)
 				dirs, pos = self.unpack_pos_uint(data, pos)
 
-				slotsfull = ord(data[pos]); pos += 1
+				slotsfull = data[pos]; pos += 1
 				self.joined_rooms[room][user] = [status, avgspeed, downloadnum, files, dirs, slotsfull]
 				
 			n3, pos = self.unpack_pos_uint(data, pos) 
@@ -579,7 +586,7 @@ class JoinRoom(BaseMessage):
 			files, pos = self.unpack_pos_uint(data, pos)
 			dirs, pos = self.unpack_pos_uint(data, pos)
 
-			free = ord(data[pos]); pos += 1
+			free = data[pos]; pos += 1
 			self.users[user] = [status, avgspeed, downloadnum, files, dirs, free]
 		self.private = False
 		self.owner = ''
@@ -623,7 +630,7 @@ class UserJoinedRoom(BaseMessage):
 		downloadnum, data = self.unpack_uint(data)
 		files, data = self.unpack_uint(data)
 		dirs, data = self.unpack_uint(data)
-		free, data = ord(data[0]), data[1:]
+		free, data = data[0], data[1:]
 		self.userdata = [status, avgspeed, downloadnum, files, dirs, free]
 		return self
 
@@ -785,7 +792,7 @@ class PrivateRoomToggle(BaseMessage):
 			enabled
 	
 	def parse(self, data):
-		self.enabled, data = ord(data[0]), data[1:]
+		self.enabled, data = data[0], data[1:]
 		return self
 
 class PrivateRoomList(BaseMessage):
@@ -860,7 +867,7 @@ class RoomMembers(BaseMessage):
 				downloadnum, pos = self.unpack_pos_uint(data, pos)
 				files, pos = self.unpack_pos_uint(data, pos)
 				dirs, pos = self.unpack_pos_uint(data, pos)
-				slotsfull = ord(data[pos]); pos += 1
+				slotsfull = data[pos]; pos += 1
 				country, pos = self.unpack_pos_string(data, pos)
 				
 				roomstatus, pos = self.unpack_pos_uint(data, pos)
@@ -1007,7 +1014,7 @@ class SearchReply(BaseMessage):
 	def parse(self, data):
 		self.ticket, data = self.unpack_uint(data)
 		self.user, data = self.unpack_string(data)
-		self.free, data = ord(data[0]), data[1:]
+		self.free, data = data[0], data[1:]
 		self.speed, data = self.unpack_uint(data)
 		self.queue, data = self.unpack_uint(data)
 		n, data = self.unpack_uint(data)
@@ -1089,7 +1096,7 @@ class TransferState(BaseMessage):
 		self.uploads = None
 
 	def unpack_transfer(self, data):
-		is_upload, data = ord(data[0]), data[1:]
+		is_upload, data = data[0], data[1:]
 		user, data = self.unpack_string(data)
 		path, data = self.unpack_string(data)
 		place, data = self.unpack_uint(data)
@@ -1148,7 +1155,7 @@ class TransferRemove(BaseMessage):
 			self.pack_string(self.path)
 
 	def parse(self, data):
-		self.upload, data = ord(data[0]), data[1:]
+		self.upload, data = data[0], data[1:]
 		self.user, data = self.unpack_string(data)
 		self.path, data = self.unpack_string(data)
 		self.transfer = self.upload, self.user, self.path
@@ -1199,7 +1206,7 @@ class TransferAbort(BaseMessage):
 			self.pack_string(self.path)
 
 	def parse(self, data):
-		self.upload, data = ord(data[0]), data[1:]
+		self.upload, data = data[0], data[1:]
 		self.user, data = self.unpack_string(data)
 		self.path, data = self.unpack_string(data)
 		self.transfer = self.upload, self.user, self.path
