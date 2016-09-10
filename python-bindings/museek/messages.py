@@ -80,6 +80,8 @@ class BaseMessage:
 			logging.exception(e)
 			raise e
 
+	def pack_boolean(self, b):
+		return bytes(chr(1 if b else 0), 'utf-8')
 
 	def unpack_int(self, d):
 		return struct.unpack("<i", d[:4])[0], d[4:]
@@ -565,13 +567,9 @@ class JoinRoom(BaseMessage):
 		self.operators = []
 
 	def make(self):
-		if self.private:
-			private = chr(1)
-		else:
-			private = chr(0)
 		return self.pack_uint(self.code) + \
 			self.pack_string(self.room) + \
-			private
+			self.pack_boolean(self.private)
 
 	def parse(self, data):
 		self.users = {}
@@ -783,14 +781,10 @@ class PrivateRoomToggle(BaseMessage):
 		self.enabled = enabled
 
 	def make(self):
-		if self.enabled:
-			enabled = chr(1)
-		else:
-			enabled = chr(0)
 		return self.pack_uint(self.code) + \
 			self.pack_uint(self.enabled) + \
-			enabled
-	
+			self.pack_boolean(self.enabled)
+
 	def parse(self, data):
 		self.enabled, data = data[0], data[1:]
 		return self
@@ -1145,12 +1139,8 @@ class TransferRemove(BaseMessage):
 		self.path = path
 
 	def make(self):
-		if self.upload:
-			upload = chr(1)
-		else:
-			upload = chr(0)
 		return self.pack_uint(self.code) + \
-			upload + \
+			self.pack_boolean(self.upload) + \
 			self.pack_string(self.user) + \
 			self.pack_string(self.path)
 
@@ -1196,12 +1186,8 @@ class TransferAbort(BaseMessage):
 		self.path = path
 
 	def make(self):
-		if self.upload:
-			upload = chr(1)
-		else:
-			upload = chr(0)
 		return self.pack_uint(self.code) + \
-			upload + \
+			self.pack_boolean(self.upload) + \
 			self.pack_string(self.user) + \
 			self.pack_string(self.path)
 
